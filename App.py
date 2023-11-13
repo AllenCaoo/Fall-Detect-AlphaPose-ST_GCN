@@ -39,7 +39,7 @@ class Models:
         self.pose_backbone = 'resnet50'
         self.show_detected = True
         self.show_skeleton = True
-        self.device = 'cuda'
+        self.device = 'cpu'
 
         self.load_models()
 

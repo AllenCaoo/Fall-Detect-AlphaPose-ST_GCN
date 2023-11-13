@@ -13,7 +13,7 @@ class SPPE_FastPose(object):
                  backbone,
                  input_height=320,
                  input_width=256,
-                 device='cuda'):
+                 device='cpu'):
         assert backbone in ['resnet50', 'resnet101'], '{} backbone is not support yet!'.format(backbone)
 
         self.inp_h = input_height

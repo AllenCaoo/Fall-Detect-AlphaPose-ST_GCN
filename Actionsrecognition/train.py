@@ -16,7 +16,7 @@ from Visualizer import plot_graphs, plot_confusion_metrix
 
 save_folder = 'saved/TSSTG(pts+mot)-01(cf+hm-hm)'
 
-device = 'cuda'
+device = 'cpu'
 epochs = 30
 batch_size = 32
 

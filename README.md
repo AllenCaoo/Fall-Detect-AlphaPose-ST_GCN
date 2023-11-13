@@ -48,3 +48,5 @@ frames by hand for training ST-GCN model.
 
 - AlphaPose : https://github.com/Amanbhandula/AlphaPose
 - ST-GCN : https://github.com/yysijie/st-gcn
+- GitHub Reference: https://github.com/GajuuzZ/Human-Falling-Detect-Tracks
+- Models: https://drive.google.com/drive/folders/1lrTI56k9QiIfMJhG9kzNjBzJh98KCIIO

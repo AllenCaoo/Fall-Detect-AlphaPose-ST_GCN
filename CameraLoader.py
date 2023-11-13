@@ -17,7 +17,10 @@ class CamLoader:
         preprocess: (Callable function) to process the frame before return.
     """
     def __init__(self, camera, preprocess=None, ori_return=False):
-        self.stream = cv2.VideoCapture(camera)
+        src = 0
+        if camera == 'camera':
+            src = 0
+        self.stream = cv2.VideoCapture(src)
         assert self.stream.isOpened(), 'Cannot read camera source!'
         self.fps = self.stream.get(cv2.CAP_PROP_FPS)
         self.frame_size = (int(self.stream.get(cv2.CAP_PROP_FRAME_WIDTH)),
@@ -33,6 +36,7 @@ class CamLoader:
         self.preprocess_fn = preprocess
 
     def start(self):
+        print("Starting video source...")
         self.t = Thread(target=self.update, args=())  # , daemon=True)
         self.t.start()
         c = 0
@@ -70,6 +74,7 @@ class CamLoader:
             return frame
 
     def stop(self):
+        print("Stopping video ource...")
         if self.stopped:
             return
         self.stopped = True

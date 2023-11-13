@@ -54,7 +54,7 @@ if __name__ == '__main__':
                         help='Show skeleton pose.')
     par.add_argument('--save_out', type=str, default='',
                         help='Save display to video file.')
-    par.add_argument('--device', type=str, default='cuda',
+    par.add_argument('--device', type=str, default='cpu',
                         help='Device to run model on cpu or cuda.')
     args = par.parse_args()
 
@@ -84,6 +84,7 @@ if __name__ == '__main__':
         cam = CamLoader_Q(cam_source, queue_size=1000, preprocess=preproc).start()
     else:
         # Use normal thread loader for webcam.
+        print("USING VIDEO SOURCE: ", cam_source)
         cam = CamLoader(int(cam_source) if cam_source.isdigit() else cam_source,
                         preprocess=preproc).start()
 
