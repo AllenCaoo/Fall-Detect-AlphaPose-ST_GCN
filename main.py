@@ -56,7 +56,10 @@ if __name__ == '__main__':
                         help='Save display to video file.')
     par.add_argument('--device', type=str, default='cpu',
                         help='Device to run model on cpu or cuda.')
+    par.add_argument('--pose_only', action='store_true',
+                        help='only run alpha pose')
     args = par.parse_args()
+    print(args.pose_only)
 
     device = args.device
 
@@ -104,82 +107,152 @@ if __name__ == '__main__':
         frame = cam.getitem()
         image = frame.copy()
 
-        # Detect humans bbox in the frame with detector model.
-        detected = detect_model.detect(frame, need_resize=False, expand_bb=10)
+        if args.pose_only:
+            # Detect humans bbox in the frame with detector model.
+            # detected = detect_model.detect(frame, need_resize=False, expand_bb=10)
+            # print(detected)
+            # detected = torch.tensor([[1, 1, 1, 1,   0.7287,   1.0000,   0.0000]])
+            detected = torch.tensor([[121.5877, 102.8877, 285.8865, 348.3001,   0.7287,   1.0000,   0.0000]])
 
-        # Predict each tracks bbox of current frame from previous frames information with Kalman filter.
-        tracker.predict()
-        # Merge two source of predicted bbox together.
-        for track in tracker.tracks:
-            det = torch.tensor([track.to_tlbr().tolist() + [0.5, 1.0, 0.0]], dtype=torch.float32)
-            detected = torch.cat([detected, det], dim=0) if detected is not None else det
+            # Predict each tracks bbox of current frame from previous frames information with Kalman filter.
+            tracker.predict()
+            # Merge two source of predicted bbox together.
+            for track in tracker.tracks:
+                det = torch.tensor([track.to_tlbr().tolist() + [0.5, 1.0, 0.0]], dtype=torch.float32)
+                detected = torch.cat([detected, det], dim=0) if detected is not None else det
 
-        detections = []  # List of Detections object for tracking.
-        if detected is not None:
-            #detected = non_max_suppression(detected[None, :], 0.45, 0.2)[0]
-            # Predict skeleton pose of each bboxs.
-            poses = pose_model.predict(frame, detected[:, 0:4], detected[:, 4])
+            detections = []  # List of Detections object for tracking.
+            if detected is not None:
+                #detected = non_max_suppression(detected[None, :], 0.45, 0.2)[0]
+                # Predict skeleton pose of each bboxs.
+                poses = pose_model.predict(frame, detected[:, 0:4], detected[:, 4])
 
-            # Create Detections object.
-            detections = [Detection(kpt2bbox(ps['keypoints'].numpy()),
-                                    np.concatenate((ps['keypoints'].numpy(),
-                                                    ps['kp_score'].numpy()), axis=1),
-                                    ps['kp_score'].mean().numpy()) for ps in poses]
+                # Create Detections object.
+                detections = [Detection(kpt2bbox(ps['keypoints'].numpy()),
+                                        np.concatenate((ps['keypoints'].numpy(),
+                                                        ps['kp_score'].numpy()), axis=1),
+                                        ps['kp_score'].mean().numpy()) for ps in poses]
 
-            # VISUALIZE.
-            if args.show_detected:
-                for bb in detected[:, 0:5]:
-                    frame = cv2.rectangle(frame, (bb[0], bb[1]), (bb[2], bb[3]), (0, 0, 255), 1)
+                # VISUALIZE.
+                if args.show_detected:
+                    for bb in detected[:, 0:5]:
+                        frame = cv2.rectangle(frame, (bb[0], bb[1]), (bb[2], bb[3]), (0, 0, 255), 1)
 
-        # Update tracks by matching each track information of current and previous frame or
-        # create a new track if no matched.
-        tracker.update(detections)
+            # Update tracks by matching each track information of current and previous frame or
+            # create a new track if no matched.
+            tracker.update(detections)
 
-        # Predict Actions of each track.
-        for i, track in enumerate(tracker.tracks):
-            if not track.is_confirmed():
-                continue
+            # of each track.
+            for i, track in enumerate(tracker.tracks):
+                if not track.is_confirmed():
+                    continue
 
-            track_id = track.track_id
-            bbox = track.to_tlbr().astype(int)
-            center = track.get_center().astype(int)
+                track_id = track.track_id
+                bbox = track.to_tlbr().astype(int)
+                center = track.get_center().astype(int)
 
-            action = 'pending..'
-            clr = (0, 255, 0)
-            # Use 30 frames time-steps to prediction.
-            if len(track.keypoints_list) == 30:
-                pts = np.array(track.keypoints_list, dtype=np.float32)
-                out = action_model.predict(pts, frame.shape[:2])
-                action_name = action_model.class_names[out[0].argmax()]
-                action = '{}: {:.2f}%'.format(action_name, out[0].max() * 100)
-                if action_name == 'Fall Down':
-                    clr = (255, 0, 0)
-                elif action_name == 'Lying Down':
-                    clr = (255, 200, 0)
+                clr = (0, 255, 0)
+                # Use 30 frames time-steps to prediction.
+        
+                # VISUALIZE.
+                if track.time_since_update == 0:
+                    if args.show_skeleton:
+                        frame = draw_single(frame, track.keypoints_list[-1])
+                    frame = cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 1)
+                    frame = cv2.putText(frame, str(track_id), (center[0], center[1]), cv2.FONT_HERSHEY_COMPLEX,
+                                        0.4, (255, 0, 0), 2)
 
-            # VISUALIZE.
-            if track.time_since_update == 0:
-                if args.show_skeleton:
-                    frame = draw_single(frame, track.keypoints_list[-1])
-                frame = cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 1)
-                frame = cv2.putText(frame, str(track_id), (center[0], center[1]), cv2.FONT_HERSHEY_COMPLEX,
-                                    0.4, (255, 0, 0), 2)
-                frame = cv2.putText(frame, action, (bbox[0] + 5, bbox[1] + 15), cv2.FONT_HERSHEY_COMPLEX,
-                                    0.4, clr, 1)
+            # Show Frame.
+            frame = cv2.resize(frame, (0, 0), fx=2., fy=2.)
+            frame = cv2.putText(frame, '%d, FPS: %f' % (f, 1.0 / (time.time() - fps_time)),
+                                (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            frame = frame[:, :, ::-1]
+            fps_time = time.time()
 
-        # Show Frame.
-        frame = cv2.resize(frame, (0, 0), fx=2., fy=2.)
-        frame = cv2.putText(frame, '%d, FPS: %f' % (f, 1.0 / (time.time() - fps_time)),
-                            (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        frame = frame[:, :, ::-1]
-        fps_time = time.time()
+            if outvid:
+                writer.write(frame)
 
-        if outvid:
-            writer.write(frame)
+            cv2.imshow('frame', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        else:
 
-        cv2.imshow('frame', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            # Detect humans bbox in the frame with detector model.
+            detected = detect_model.detect(frame, need_resize=False, expand_bb=10)
+
+            # Predict each tracks bbox of current frame from previous frames information with Kalman filter.
+            tracker.predict()
+            # Merge two source of predicted bbox together.
+            for track in tracker.tracks:
+                det = torch.tensor([track.to_tlbr().tolist() + [0.5, 1.0, 0.0]], dtype=torch.float32)
+                detected = torch.cat([detected, det], dim=0) if detected is not None else det
+
+            detections = []  # List of Detections object for tracking.
+            if detected is not None:
+                #detected = non_max_suppression(detected[None, :], 0.45, 0.2)[0]
+                # Predict skeleton pose of each bboxs.
+                poses = pose_model.predict(frame, detected[:, 0:4], detected[:, 4])
+
+                # Create Detections object.
+                detections = [Detection(kpt2bbox(ps['keypoints'].numpy()),
+                                        np.concatenate((ps['keypoints'].numpy(),
+                                                        ps['kp_score'].numpy()), axis=1),
+                                        ps['kp_score'].mean().numpy()) for ps in poses]
+
+                # VISUALIZE.
+                if args.show_detected:
+                    for bb in detected[:, 0:5]:
+                        frame = cv2.rectangle(frame, (bb[0], bb[1]), (bb[2], bb[3]), (0, 0, 255), 1)
+
+            # Update tracks by matching each track information of current and previous frame or
+            # create a new track if no matched.
+            tracker.update(detections)
+
+            # Predict Actions of each track.
+            for i, track in enumerate(tracker.tracks):
+                if not track.is_confirmed():
+                    continue
+
+                track_id = track.track_id
+                bbox = track.to_tlbr().astype(int)
+                center = track.get_center().astype(int)
+
+                action = 'pending..'
+                clr = (0, 255, 0)
+                # Use 30 frames time-steps to prediction.
+                if len(track.keypoints_list) == 30:
+                    pts = np.array(track.keypoints_list, dtype=np.float32)
+                    out = action_model.predict(pts, frame.shape[:2])
+                    action_name = action_model.class_names[out[0].argmax()]
+                    action = '{}: {:.2f}%'.format(action_name, out[0].max() * 100)
+                    if action_name == 'Fall Down':
+                        clr = (255, 0, 0)
+                    elif action_name == 'Lying Down':
+                        clr = (255, 200, 0)
+
+                # VISUALIZE.
+                if track.time_since_update == 0:
+                    if args.show_skeleton:
+                        frame = draw_single(frame, track.keypoints_list[-1])
+                    frame = cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 1)
+                    frame = cv2.putText(frame, str(track_id), (center[0], center[1]), cv2.FONT_HERSHEY_COMPLEX,
+                                        0.4, (255, 0, 0), 2)
+                    frame = cv2.putText(frame, action, (bbox[0] + 5, bbox[1] + 15), cv2.FONT_HERSHEY_COMPLEX,
+                                        0.4, clr, 1)
+
+            # Show Frame.
+            frame = cv2.resize(frame, (0, 0), fx=2., fy=2.)
+            frame = cv2.putText(frame, '%d, FPS: %f' % (f, 1.0 / (time.time() - fps_time)),
+                                (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            frame = frame[:, :, ::-1]
+            fps_time = time.time()
+
+            if outvid:
+                writer.write(frame)
+
+            cv2.imshow('frame', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
     # Clear resource.
     cam.stop()
