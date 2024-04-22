@@ -217,7 +217,7 @@ if __name__ == '__main__':
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     
-    np.save("data.npy", np.array(DATA))
+    np.save("data.npy", np.asarray(DATA, dtype="object"))
 
     # Clear resource.
     cam.stop()
